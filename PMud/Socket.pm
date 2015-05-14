@@ -13,10 +13,6 @@ use PMud::Socket::Client;
 
 =cut
 
-my %defaults = (
-    port => 9999
-);
-
 =head1 Methods
 
 =head2 new
@@ -32,17 +28,17 @@ sub new {
 
     my $self = {};
 
-    my $port = $opts{port} // $defaults{port};
+    die "No port specified" if (! $opts{port});
 
     $self->{socket} = IO::Socket::INET->new(
         Listen      => SOMAXCONN,
-        LocalPort   => $port,
+        LocalPort   => $opts{port},
         Blocking    => 0,
         ReuseAddr   => 1,
         Proto       => 'tcp'
     );
 
-    die "Unable to listen on port $port: $!\n" if (! $self->{socket});
+    die "Unable to listen on port $opts{port}: $!\n" if (! $self->{socket});
 
     return bless $self, $class;
 }

@@ -5,13 +5,25 @@ use warnings;
 
 @PMud::Data::Room::ISA = ('PMud::Data');
 
+my %OBJS = ();
+
 sub new {
     my $class = shift;
-    my %data = @_;
+    my $data = shift;
+
+    return undef if (! $data or ref $data ne "HASH");
 
     my $self = {};
 
-    return bless $self, $class;
+    # Store the entire data structure so we can easily dump it back to DB later
+    $self->{data} = $data;
+    $self->{id} = $data->{id};
+
+    bless $self, $class;
+
+    $OBJS{$self->{id}} = $self;
+
+    return $self;
 }
 
 1;

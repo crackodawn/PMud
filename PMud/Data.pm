@@ -21,24 +21,20 @@ use PMud::Data::NPC;
 
 =cut
 
-my %defaults = (
-    dbfile => 'PMud.db'
-);
-
 sub new {
     my $class = shift;
     my %opts = @_;
 
-    my $dbfile = $opts{dbfile} // $defaults{dbfile};
+    die "No dbfile specified" if (! $opts{dbfile});
 
     my $self = {};
 
     my $create = 0;
-    if (! -e $dbfile) { $create = 1; }
+    if (! -e $opts{dbfile}) { $create = 1; }
 
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","");
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$opts{dbfile}","","");
 
-    die "Could not open DB file $dbfile: $!" if (! $dbh);
+    die "Could not open DB file $opts{dbfile}: $!" if (! $dbh);
 
     $dbh->{FetchHashKeyName} = "NAME_lc";
 
@@ -47,7 +43,7 @@ sub new {
     bless $self, $class;
 
     if ($create) {
-        $self->_createDb or die "Could not create new database $dbfile";
+        $self->_createDb or die "Could not create new database $opts{dbfile}";
     }
 
     # Now preload the entire DB one section at a time
@@ -64,7 +60,7 @@ sub _createDb {
     my $self = shift;
 
     # Create the 3 tables
-    $self->{dbh}->do("CREATE TABLE players (id INT PRIMARY KEY, name VARCHAR(255), password VARCHAR(14))");
+    $self->{dbh}->do("CREATE TABLE players (id VARCHAR(255) PRIMARY KEY, password VARCHAR(14))");
     $self->{dbh}->do("CREATE TABLE npcs (id INT PRIMARY KEY, name VARCHAR(255), description TEXT)");
     $self->{dbh}->do("CREATE TABLE rooms (id INT PRIMARY KEY, name VARCHAR(255), description TEXT)");
 
@@ -74,7 +70,7 @@ sub _createDb {
 
     # Create a single admin user and a basic room, both required to actually
     # login to the MUD
-    $self->{dbh}->do("INSERT INTO players VALUES (0, 'admin', '$passwd')") or return 0;
+    $self->{dbh}->do("INSERT INTO players VALUES ('admin', '$passwd')") or return 0;
     $self->{dbh}->do("INSERT INTO rooms VALUES (0, 'The Void', 'The empty void of space')") or return 0;
 
     return 1;
@@ -197,6 +193,18 @@ sub getObject {
     }
 
     return $obj;
+}
+
+=head2 id
+
+  Returns the id of the object.
+
+=cut
+
+sub id {
+    my $self = shift;
+
+    return $self->{id};
 }
 
 =head2 save

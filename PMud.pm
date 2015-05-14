@@ -6,9 +6,25 @@ use Time::HiRes qw(usleep);
 use PMud::Socket;
 use PMud::Data;
 
+our $VERSION = '0.01';
+
 =head1 Synopsis
 
-  PMud - The entire PMud event system
+  PMud - The PMud event system.  With this module you can create a PMud object
+  and then call the run method to start up the system.  The system will continue
+  running until it is shut down by someone connected.
+
+  use PMud;
+
+  my $mud = PMud->new(
+                db => '/path/to/file.db',
+                port => 9999,
+                motd => '/path/to/motd.txt'
+            );
+
+  $mud->run or exit 1;
+
+  exit 0;
 
 =cut
 
@@ -16,16 +32,29 @@ use PMud::Data;
 
 =cut
 
-=head2 new
+=head2 new(%args)
 
   Create a new PMud object - this is the main object that runs the entire
   MUD system.
 
-=cut
+  Possible arguments are:
+    db => 'file',
+    port => ####,
+    motd => 'file',
+    adminchar => 'c'
 
-my %defaults = (
-    motd => 'motd'
-);
+  db and port are required arguments where db is the full path to the SQLITE3
+  database (if it doesn't exist, it will be created), and port is an integer 
+  of the port that the server should listen on.
+
+  If motd is specified as a full path to a file that exists, then the text in
+  this file will be sent to each client as they connect.
+
+  adminchar specifies a single character that administrator clients can use to
+  specify that they are trying to execute an administrative command.  The
+  default is '.' but it can be set to any character.
+
+=cut
 
 sub new {
     my $class = shift;
@@ -33,22 +62,36 @@ sub new {
 
     my $self = {};
 
-    my $motdfile = $opts{motd} // $defaults{motd};
-    if ($motdfile and -r $motdfile) {
-        open my $motd, '<', $motdfile;
+    die "No db filename provided" if (! $opts{db});
+    die "No port specified" if (! $opts{port});
+
+    $self->{dbfile} = $opts{db};
+    $self->{port} = $opts{port};
+
+    if ($opts{motd} and -r $opts{motd}) {
+        open my $motd, '<', $opts{motd};
         while (<$motd>) {
             $self->{motd} .= $_;
         }
         close $motd;
+    } else {
+        $self->{motd} = "";
+    }
+
+    if ($opts{adminchar}) {
+        $self->{adminchar} = substr($opts{adminchar},0,1);
+    } else {
+        $self->{adminchar} = ".";
     }
 
     return bless $self, $class;
 }
 
-=head2 run
+=head2 $self->run
 
-  Start the MUD - runs in a continuous loop until an exit code is received
-  (from someone connected)
+  The run method actually starts the MUD process.  It reads the database
+  (creating one if it doesn't exist), opens the listening socket, and then
+  starts the loop.
 
 =cut
 
@@ -57,30 +100,48 @@ sub run {
 
     my @clients = ();
 
-    my $data = PMud::Data->new();
-    my $server = PMud::Socket->new();
+    # Open the database
+    $self->{data} = PMud::Data->new(dbfile => $self->{dbfile});
+    # Open the server socket
+    $self->{server} = PMud::Socket->new(port => $self->{port});
 
-    my $up = 1;
     my $cinput;
     my $cnum;
-    while ($up) {
-        foreach my $client ($server->getNewClients) {
+    $self->{up} = 1;
+    # Run the loop
+    while ($self->{up}) {
+        # Get new clients
+        foreach my $client ($self->{server}->getNewClients) {
             push @clients, $client;
             $client->send($self->{motd});
+            $client->authenticate;
         }
 
         $cnum = 0;
+        # Process output/input for all clients
         while ($clients[$cnum]) {
-            $clients[$cnum]->writebuffer or do {
+            if (! $clients[$cnum]->connected or ! $clients[$cnum]->writebuffer) {
                 $clients[$cnum]->disconnect;
                 splice(@clients, $cnum, 1);
                 next;
-            };
+            }
 
             $cinput = $clients[$cnum]->get;
 
-            if ($cinput =~ /die/) {
-                $up = 0;
+            if ($cinput) {
+                # Process player input if the client has authenticated
+                if ($clients[$cnum]->authentic) {
+                    # If input starts with the admin character and the player
+                    # is an admin, process admin input
+                    if (substr($cinput,0,1) eq $self->{adminchar} and $clients[$cnum]->player->is_admin) {
+                        $self->admin_do(substr($cinput,1));
+                    } else {
+                        $clients[$cnum]->player->do($cinput);
+                    }
+                # Otherwise try to continue client authentication
+                } else {
+                    $clients[$cnum]->authenticate($self->{data}, $cinput);
+                }
             }
 
             $cnum++;
@@ -90,7 +151,24 @@ sub run {
     }
 }
 
-=head2 errstr
+=head2 $self->admin_do($command)
+
+   Process an administrative command.  This method is called when a connected
+   client with administrative permissions tries to run a command starting with
+   the defined admin character (default '.').
+
+=cut
+
+sub admin_do {
+    my $self = shift;
+    my $command = shift;
+
+    if ($command =~ /^die$/) {
+        $self->{up} = 0;
+    }
+}
+
+=head2 $self->errstr
 
   Returns the last error string set for the object
 
