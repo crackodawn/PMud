@@ -11,13 +11,19 @@ use PMud::Data::NPC;
 
 =head1 Synopsis
 
-  Data management - SQLITE database functions for Data objects
+  PMud::Data - PMud data storage and manipulation.
+
+  Primarily handles the connectivity to the PMud database, but also creates
+  new Room, Player and NPC objects from that data.
 
 =head1 Methods
 
-=head2 new
+=head2 new(%opts)
 
-  Create a new Data connection to the database
+  Create a new object which contains a connection to the SQLite database, and
+  all of the DB data preloaded into memory.
+
+  %opts must at least contain dbfile => '/path/to/file.db'
 
 =cut
 
@@ -47,9 +53,9 @@ sub new {
     }
 
     # Now preload the entire DB one section at a time
-    $self->loadPlayers or die "Unable to load players from database";
-    $self->loadNPCs or die "Unable to load NPCs from database";
     $self->loadRooms or die "Unable to load rooms from database";
+    $self->loadNPCs or die "Unable to load NPCs from database";
+    $self->loadItems or die "Unable to load items from database";
 
     return $self;
 }
@@ -60,9 +66,13 @@ sub _createDb {
     my $self = shift;
 
     # Create the 3 tables
-    $self->{dbh}->do("CREATE TABLE players (id VARCHAR(255) PRIMARY KEY, password VARCHAR(14))");
-    $self->{dbh}->do("CREATE TABLE npcs (id INT PRIMARY KEY, name VARCHAR(255), description TEXT)");
-    $self->{dbh}->do("CREATE TABLE rooms (id INT PRIMARY KEY, name VARCHAR(255), description TEXT)");
+    # Stats include location, level, class, sex, position, all current stats, all true stats, curr/max hp/mana/stam
+    $self->_do("CREATE TABLE players (id VARCHAR(255) PRIMARY KEY, password VARCHAR(14), flags INT, comms INT, location INT, stats VARCHAR(100), channels INT, skills INT)") or return 0;
+    $self->_do("CREATE TABLE npcs (id INT PRIMARY KEY, name VARCHAR(255), short TEXT, description TEXT, stats VARCHAR(100), flags INT)") or return 0;
+    $self->_do("CREATE TABLE rooms (id INT PRIMARY KEY, name VARCHAR(255), description TEXT, terrain INT, flags INT, exits VARCHAR(255), resets TEXT)") or return 0;
+    # defs will be things like type, size, weight, wearloc
+    # typedefs are definitions specific to that item type like armor info, weapon info, or container info
+    $self->_do("CREATE TABLE items (id INT PRIMARY KEY, name VARCHAR(255), short TEXT, description TEXT, defs VARCHAR(64), typedefs VARCHAR(64), flags INT, mods INT)") or return 0;
 
 
     my $salt = join '', ('.', '/', 0..9, 'A'..'Z', 'a'..'z')[rand 64, rand 64];
@@ -70,8 +80,8 @@ sub _createDb {
 
     # Create a single admin user and a basic room, both required to actually
     # login to the MUD
-    $self->{dbh}->do("INSERT INTO players VALUES ('admin', '$passwd')") or return 0;
-    $self->{dbh}->do("INSERT INTO rooms VALUES (0, 'The Void', 'The empty void of space')") or return 0;
+    $self->_do("INSERT INTO players VALUES ('admin', '$passwd', 0, 0, 0, '0 1 M 0 1 1 1 1 1 1 1 1 1 1 1 1', 0, 0)") or return 0;
+    $self->_do("INSERT INTO rooms VALUES (0, 'The Void', 'The empty void of space', 0, 0, 0, NULL)") or return 0;
 
     return 1;
 }
@@ -99,19 +109,25 @@ sub _getTable {
     return $hashref;
 }
 
-# Load all player table data into the data object
-sub loadPlayers {
+sub _getRow {
     my $self = shift;
+    my $table = shift;
+    my $id = shift;
 
-    my $hr = $self->_getTable("players");
+    my $sth = $self->{dbh}->prepare_cached("SELECT * FROM $table WHERE id = ?");
+    $sth->execute($id);
+    my $hashref = $sth->fetchrow_hashref();
+    $sth->finish();
 
-    if (ref $hr eq "HASH") {
-        $self->{players} = $hr;
-        return 1;
-    }
-
-    return 0;
+    return $hashref;
 }
+
+=head2 $self->loadNPCs
+
+  Retrieve all data from the npcs table in the DB and store it into a
+  hashref in the object.
+
+=cut
 
 # Load all NPC table data into the data object
 sub loadNPCs {
@@ -127,23 +143,72 @@ sub loadNPCs {
     return 0;
 }
 
-# Load all room table data into the data object
+=head2 $self->loadRooms
+
+  Retrieve all data from the rooms table in the DB and store it into a
+  hashref in the object.
+
+=cut
+
+# Load all room table data into a hash of PMud::Data::Room objects
 sub loadRooms {
     my $self = shift;
 
     my $hr = $self->_getTable("rooms");
 
     if (ref $hr eq "HASH") {
-        $self->{rooms} = $hr;
+        foreach my $roomid (keys %$hr) {
+            my $obj = PMud::Data::Room->new($self, $hr->{$roomid});
+            $self->{roomobjs}->{$roomid} = $obj;
+        }
+
+        if (! $self->{roomsobjs}->{0}) {
+            # If no room 0 exists we need to create a blank one, as many things
+            # depend on this room existing
+            $self->{roomobjs}->{0} = PMud::Data::Room->new($self, { id => 0 });
+        }
+
         return 1;
     }
 
     return 0;
 }
 
-=head2 getObject
+=head2 $self->loadItems
 
-  Query for an object of a specific type and return a constructed object
+  Retrieve all data from the items table in the DB and store it into a
+  hashref in the object.
+
+=cut
+
+# Load all item table data into the data object
+sub loadItems {
+    my $self = shift;
+
+    my $hr = $self->_getTable("items");
+
+    if (ref $hr eq "HASH") {
+        $self->{items} = $hr;
+        return 1;
+    }
+
+    return 0;
+}
+
+=head2 $self->getObject(%opts)
+
+  Query for an object of a specific type and return a constructed PMud::Data::*
+  object. Opts:
+
+    type => 'player|room|npc',
+    id => 'id' # Player name, or room/npc id number
+
+  Once a player or room object is constructed for the first time, it will be 
+  statically saved for return later without having to create a new object.
+
+  NPC and Item objects can be duplicates (as there could be more than one of
+  a specific item or NPC) and are stored with a sub UID so different copies
+  of the same item/npc can be differentiated.
 
 =cut
 
@@ -156,7 +221,7 @@ sub getObject {
         return undef;
     }
 
-    if (! $opts{id}) {
+    if (! exists $opts{id}) {
         $self->errstr("No ID specified in getObject");
         return undef;
     }
@@ -164,21 +229,23 @@ sub getObject {
     my $obj;
     my $data;
     if ($opts{type} eq "player") {
-        if (exists $self->{players}->{$opts{id}}) {
-            $data = $self->{players}->{$opts{id}};
+        if (exists $self->{playerobjs}->{$opts{id}}) {
+            $obj = $self->{playerobjs}->{$opts{id}};
         } else {
-            $self->errstr("No player with ID $opts{id} exists");
-            return undef;
+            my $data = $self->_getRow("players", $opts{id});
+            if (! $data) {
+                $self->errstr("No player with ID $opts{id} exists");
+            }
+            $obj = PMud::Data::Player->new($self, $data);
+            $self->{playerobjs}->{$opts{id}} = $obj;
         }
-        $obj = PMud::Data::Player->new($data);
     } elsif ($opts{type} eq "room") {
-        if (exists $self->{rooms}->{$opts{id}}) {
-            $data = $self->{rooms}->{$opts{id}};
+        if (exists $self->{roomobjs}->{$opts{id}}) {
+            $obj = $self->{roomobjs}->{$opts{id}};
         } else {
             $self->errstr("No room with ID $opts{id} exists");
             return undef;
         }
-        $obj = PMud::Data::Room->new($data);
     } elsif ($opts{type} eq "npc") {
         if (exists $self->{npcs}->{$opts{id}}) {
             $data = $self->{npcs}->{$opts{id}};
@@ -186,7 +253,17 @@ sub getObject {
             $self->errstr("No npc with ID $opts{id} exists");
             return undef;
         }
-        $obj = PMud::Data::NPC->new($data);
+        $obj = PMud::Data::NPC->new($self, $data);
+        $self->{npcobjs}->{$opts{id}}->{$obj->uid} = $obj;
+    } elsif ($opts{type} eq "item") {
+        if (exists $self->{items}->{$opts{id}}) {
+            $data = $self->{items}->{$opts{id}};
+        } else {
+            $self->errstr("No item with ID $opts{id} exists");
+            return undef;
+        }
+        $obj = PMud::Data::Item->new($self, $data);
+        $self->{itemobjs}->{$opts{id}}->{$obj->uid} = $obj;
     } else {
         $self->errstr("Invalid type specified in getObject");
         return undef;
@@ -195,7 +272,7 @@ sub getObject {
     return $obj;
 }
 
-=head2 id
+=head2 $self->id
 
   Returns the id of the object.
 
@@ -204,16 +281,16 @@ sub getObject {
 sub id {
     my $self = shift;
 
-    return $self->{id};
+    return $self->{data}->{id};
 }
 
-=head2 save
+=head2 $self->save
 
   Save the Data object (which can be a Player, Room or NPC) back into the DB
 
 =cut
 
-sub save {
+sub writeToDb {
     my $self = shift;
 
     my $objtype = ref $self;
@@ -225,8 +302,10 @@ sub save {
         $table = "rooms";
     } elsif ($objtype eq "PMud::Data::NPC") {
         $table = "npcs";
+    } elsif ($objtype eq "PMud::Data::Item") {
+        $table = "items";
     } else {
-        return 0;
+        return 1;
     }
 
     my @columns = ();
@@ -239,13 +318,24 @@ sub save {
     }
 
     my $query = "INSERT OR REPLACE INTO $table (".join(', ', @marks).") VALUES (".join(', ', @marks).")";
-    my $sth = $self->{dbh}->prepare_cached($query);
+    my $sth = $self->{parent}->{dbh}->prepare_cached($query);
     if ($sth->execute(@columns, @values)) {
         $sth->finish();
         return 1;
     } else {
         return 0;
     }
+}
+
+=head2 $self->cleanup
+
+  Clean up all objects that are no longer needed (NPC or Item objects that
+  should no longer exist because they're dead or have been destroyed)
+
+=cut
+
+sub cleanup {
+    my $self = shift;
 }
 
 1;

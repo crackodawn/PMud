@@ -2,23 +2,50 @@ package PMud::Socket::Client;
 
 use strict;
 use warnings;
+use Term::ANSIColor;
 
 @PMud::Socket::Client::ISA = ('PMud::Socket', 'PMud');
 
 our $TIMEOUT = 900;
 
+# Color codes to interpret and send
+my %COLORS = (
+    r   => Term::ANSIColor::color('clear red'),
+    R   => Term::ANSIColor::color('bold red'),
+    b   => Term::ANSIColor::color('clear blue'),
+    B   => Term::ANSIColor::color('bold blue'),
+    y   => Term::ANSIColor::color('clear yellow'),
+    Y   => Term::ANSIColor::color('bold yellow'),
+    c   => Term::ANSIColor::color('clear cyan'),
+    C   => Term::ANSIColor::color('bold cyan'),
+    g   => Term::ANSIColor::color('clear green'),
+    G   => Term::ANSIColor::color('bold green'),
+    m   => Term::ANSIColor::color('clear magenta'),
+    M   => Term::ANSIColor::color('bold magenta'),
+    d   => Term::ANSIColor::color('clear black'),
+    D   => Term::ANSIColor::color('bold black'),
+    w   => Term::ANSIColor::color('clear white'),
+    W   => Term::ANSIColor::color('bold white'),
+    x   => Term::ANSIColor::color('reset')
+);
+
+# Pad the remainder just in case someone references one
+foreach ("A".."Z", "a".."z") {
+    $COLORS{$_} = "" if not defined $COLORS{$_};
+}
+
 =head1 Synopsis
 
-  Objects for each connected client
+  PMud::Socket::Client - Connected client objects.
 
 =cut
 
 =head1 Methods
 
-=head2 new
+=head2 new($socket)
 
   Create a new object, takes one mandatory argument which is an IO::Socket::INET
-  connection.
+  object.
 
 =cut
 
@@ -27,6 +54,10 @@ sub new {
     my $socket = shift;
 
     my $self = {};
+
+    if (! $socket or ! ref $socket) {
+        die "No socket provided or socket provided is not a reference";
+    }
 
     $self->{socket} = $socket;
     $self->{lastrecv} = time;
@@ -37,9 +68,9 @@ sub new {
     return bless $self, $class;
 }
 
-=head2 send
+=head2 $self->send($data)
 
-  Add to the output buffer for the client.
+  Add $data to the output buffer to send to the client.
 
 =cut
 
@@ -54,7 +85,7 @@ sub send {
     return 1;
 }
 
-=head2 writebuffer
+=head2 $self->writebuffer
 
   Write the output buffer to the client.
 
@@ -72,9 +103,11 @@ sub writebuffer {
     return $rc;
 }
 
-=head2 get
+=head2 $self->get
 
-  Read the client for data to add to the input buffer
+  Read the client for input to add to the input buffer.
+
+  Returns one line of input from the input buffer.
 
 =cut
 
@@ -103,9 +136,10 @@ sub get {
     return $buffer;
 }
 
-=head2 player
+=head2 $self->player
 
-  Returns the player object attached to this client if one exists, otherwise undef
+  Returns the PMud::Data::Player object attached to this client if the client
+  has one associated with it, otherwise returns undef.
 
 =cut
 
@@ -118,6 +152,18 @@ sub player {
 
     return undef;
 }
+
+=head2 $self->authenticate($dataobj, $input)
+
+  Process the authentication of a client.  The first argument is a PMud::Data
+  object that can be used to look up a player during authentication.  The
+  second argument is some text that will be used to authenticate the player.
+
+  Authentication happens in multiple steps and therefore this method is called
+  multiple times, each successful call moves the object's authentication status
+  to the next step.
+
+=cut
 
 # Handle the authentication process for the client
 sub authenticate {
@@ -151,7 +197,8 @@ sub authenticate {
             $self->{connected} = 1;
             # Set the client in the player object
             $self->{player}->client($self);
-            $self->send("Welcome to the MUD, ".$self->player->id."!\n\r");
+            $self->send("Welcome to the MUD, ".$self->player->id."!\n\r\n\r");
+            $self->{player}->look;
             return 1;
         } else {
             delete $self->{player};
@@ -164,6 +211,13 @@ sub authenticate {
     }
 }
 
+=head2 $self->authentic
+
+  Returns a true value if the client has authenticated, or a false value
+  otherwise.
+
+=cut
+
 sub authentic {
     my $self = shift;
 
@@ -172,11 +226,25 @@ sub authentic {
     return 0;
 }
 
+=head2 $self->connected
+
+  Returns a true value if the client is thought to still be connected, or a
+  false or undefined value if the client is known to no longer be connected.
+
+=cut
+
 sub connected {
     my $self = shift;
 
     return $self->{connected};
 }
+
+=head2 $self->disconnect
+
+  Save any PMud::Data::Player object attached to this client and then close
+  the socket and mark it as no longer connected.
+
+=cut
 
 sub disconnect {
     my $self = shift;
@@ -185,6 +253,7 @@ sub disconnect {
         $pObj->save;
     }
 
+    close $self->{socket};
     $self->{connected} = 0;
 }
 

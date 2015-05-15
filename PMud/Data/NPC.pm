@@ -5,13 +5,34 @@ use warnings;
 
 @PMud::Data::NPC::ISA = ('PMud::Data');
 
+my $uid = 0;
+
 sub new {
     my $class = shift;
-    my %data = @_;
+    my $parent = shift;
+    my $data = shift;
+
+    return undef if (! $data or ref $data ne "HASH");
 
     my $self = {};
 
-    return bless $self, $class;
+    $self->{parent} = $parent;
+
+    # Store the entire data structure so we can easily dump it back to DB later
+    $self->{data} = $data;
+    $self->{id} = $data->{id};
+    $self->{uid} = $uid;
+    $uid++;
+
+    bless $self, $class;
+
+    return $self;
+}
+
+sub uid {
+    my $self = shift;
+
+    return $self->{uid};
 }
 
 1;

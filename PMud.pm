@@ -147,6 +147,8 @@ sub run {
             $cnum++;
         }
 
+        $self->{data}->cleanup;
+
         usleep(1000);
     }
 }

@@ -9,16 +9,17 @@ use PMud::Socket::Client;
 
 =head1 Synopsis
 
-  PMud::Socket handles new client connections
+  PMud::Socket - The server object that handles new client connections
+
+  PMud::Socket->new(port => ####);
 
 =cut
 
 =head1 Methods
 
-=head2 new
+=head2 new(port => ####)
 
-  Create a new listening socket.  Port may be specified otherwise the default
-  will be used.
+  Create a new object with a listening socket.  Port is required.
 
 =cut
 
@@ -43,9 +44,11 @@ sub new {
     return bless $self, $class;
 }
 
-=head2 getNewClients
+=head2 $self->getNewClients
 
-  Check for any new connections and process them.
+  Check for new connections on the object's listening socket and create new
+  client objects for each new connection. Returns an array of
+  PMud::Socket::Client objects.
 
 =cut
 
