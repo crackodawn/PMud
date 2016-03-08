@@ -65,7 +65,7 @@ sub new {
 sub _createDb {
     my $self = shift;
 
-    # Create the 3 tables
+    # Create the 5 tables
     # Stats include location, level, class, sex, position, all current stats, all true stats, curr/max hp/mana/stam
     $self->_do("CREATE TABLE players (id VARCHAR(255) PRIMARY KEY, password VARCHAR(14), flags INT, comms INT, location INT, stats VARCHAR(100), channels INT, skills INT)") or return 0;
     $self->_do("CREATE TABLE npcs (id INT PRIMARY KEY, name VARCHAR(255), short TEXT, description TEXT, stats VARCHAR(100), flags INT)") or return 0;
@@ -73,15 +73,19 @@ sub _createDb {
     # defs will be things like type, size, weight, wearloc
     # typedefs are definitions specific to that item type like armor info, weapon info, or container info
     $self->_do("CREATE TABLE items (id INT PRIMARY KEY, name VARCHAR(255), short TEXT, description TEXT, defs VARCHAR(64), typedefs VARCHAR(64), flags INT, mods INT)") or return 0;
-
+    $self->_do("CREATE TABLE bug (id INT PRIMARY KEY, message TEXT");
 
     my $salt = join '', ('.', '/', 0..9, 'A'..'Z', 'a'..'z')[rand 64, rand 64];
     my $passwd = crypt('admin', $salt);
 
     # Create a single admin user and a basic room, both required to actually
     # login to the MUD
-    $self->_do("INSERT INTO players VALUES ('admin', '$passwd', 0, 0, 0, '0 1 M 0 1 1 1 1 1 1 1 1 1 1 1 1', 0, 0)") or return 0;
-    $self->_do("INSERT INTO rooms VALUES (0, 'The Void', 'The empty void of space', 0, 0, 0, NULL)") or return 0;
+    $self->_do("INSERT INTO players VALUES ('admin', '$passwd', 0, 0, 0, '10 0 1 M 0 1 1 1 1 1 1 1 1 1 1 1 1', 0, 0)") or return 0;
+    $self->_do("INSERT INTO rooms VALUES (0, 'The Void', 'The empty void of space', 0, 0, 'N1 E2 W3', NULL)") or return 0;
+    $self->_do("INSERT INTO rooms VALUES (1, 'Room 1', 'A new room 1', 0, 0, 'S0', NULL)") or return 0;
+    $self->_do("INSERT INTO rooms VALUES (2, 'Room 2', 'A new room 2', 0, 0, 'W0', NULL)") or return 0;
+    $self->_do("INSERT INTO rooms VALUES (3, 'Room 3', 'A new room 3', 0, 0, 'E0 S4', NULL)") or return 0;
+    $self->_do("INSERT INTO rooms VALUES (4, 'Room 4', 'A new room 4', 0, 0, 'N3', NULL)") or return 0;
 
     return 1;
 }
@@ -162,7 +166,7 @@ sub loadRooms {
             $self->{roomobjs}->{$roomid} = $obj;
         }
 
-        if (! $self->{roomsobjs}->{0}) {
+        if (! $self->{roomobjs}->{0}) {
             # If no room 0 exists we need to create a blank one, as many things
             # depend on this room existing
             $self->{roomobjs}->{0} = PMud::Data::Room->new($self, { id => 0 });
@@ -200,7 +204,7 @@ sub loadItems {
   Query for an object of a specific type and return a constructed PMud::Data::*
   object. Opts:
 
-    type => 'player|room|npc',
+    type => 'player|room|npc|item',
     id => 'id' # Player name, or room/npc id number
 
   Once a player or room object is constructed for the first time, it will be 
@@ -254,7 +258,7 @@ sub getObject {
             return undef;
         }
         $obj = PMud::Data::NPC->new($self, $data);
-        $self->{npcobjs}->{$opts{id}}->{$obj->uid} = $obj;
+        $self->{npcobjs}->{$opts{id}}->{$obj->sid} = $obj;
     } elsif ($opts{type} eq "item") {
         if (exists $self->{items}->{$opts{id}}) {
             $data = $self->{items}->{$opts{id}};
@@ -263,7 +267,7 @@ sub getObject {
             return undef;
         }
         $obj = PMud::Data::Item->new($self, $data);
-        $self->{itemobjs}->{$opts{id}}->{$obj->uid} = $obj;
+        $self->{itemobjs}->{$opts{id}}->{$obj->sid} = $obj;
     } else {
         $self->errstr("Invalid type specified in getObject");
         return undef;
@@ -284,7 +288,7 @@ sub id {
     return $self->{data}->{id};
 }
 
-=head2 $self->save
+=head2 $self->writeToDb
 
   Save the Data object (which can be a Player, Room or NPC) back into the DB
 
@@ -293,16 +297,14 @@ sub id {
 sub writeToDb {
     my $self = shift;
 
-    my $objtype = ref $self;
-
     my $table;
-    if ($objtype eq "PMud::Data::Player") {
+    if ($self->isa("PMud::Data::Player")) {
         $table = "players";
-    } elsif ($objtype eq "PMud::Data::Room") {
+    } elsif ($self->isa("PMud::Data::Room")) {
         $table = "rooms";
-    } elsif ($objtype eq "PMud::Data::NPC") {
+    } elsif ($self->isa("PMud::Data::NPC")) {
         $table = "npcs";
-    } elsif ($objtype eq "PMud::Data::Item") {
+    } elsif ($self->isa("PMud::Data::Item")) {
         $table = "items";
     } else {
         return 1;
@@ -320,6 +322,27 @@ sub writeToDb {
     my $query = "INSERT OR REPLACE INTO $table (".join(', ', @marks).") VALUES (".join(', ', @marks).")";
     my $sth = $self->{parent}->{dbh}->prepare_cached($query);
     if ($sth->execute(@columns, @values)) {
+        $sth->finish();
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+=head2 $self->log_bug
+
+  Log the provided message into the bug table
+
+=cut
+
+sub log_bug {
+    my $self = shift;
+    my $message = shift;
+
+    return 0 if (! $message);
+
+    my $sth = $self->{parent}->{dbh}->prepare_cached("INSERT INTO bug (message) VALUES (?)");
+    if ($sth->execute($message)) {
         $sth->finish();
         return 1;
     } else {

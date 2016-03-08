@@ -1,9 +1,9 @@
-package PMud::Data::NPC;
+package PMud::Data::Item;
 
 use strict;
 use warnings;
 
-@PMud::Data::NPC::ISA = ('PMud::Data');
+@PMud::Data::Item::ISA = ('PMud::Data');
 
 my $SID = 0;
 
@@ -35,3 +35,4 @@ sub sid {
 }
 
 1;
+

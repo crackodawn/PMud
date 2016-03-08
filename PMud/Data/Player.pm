@@ -2,8 +2,26 @@ package PMud::Data::Player;
 
 use strict;
 use warnings;
+use Data::Dumper;
 
 @PMud::Data::Player::ISA = ('PMud::Data');
+
+my @CMDDISPATCH = (
+    'north',        \&north,
+    'ne',           \&northeast,
+    'northeast',    \&northeast,
+    'nw',           \&northwest,
+    'northwest',    \&northwest,
+    'east',         \&east,
+    'south',        \&south,
+    'se',           \&southeast,
+    'southeast',    \&southeast,
+    'sw',           \&southwest,
+    'southwest',    \&southwest,
+    'west',         \&west,
+    'move',         \&move,
+    'look',         \&look
+);
 
 =head1 Synopsis
 
@@ -11,12 +29,58 @@ use warnings;
   all of the data about the player and the methods necessary to make the player
   do things such as move around or interact with the world
 
+=head1 Functions
+
+=head2 add_command($command, \&function, $where)
+
+  Call this function directly to extend the possible player commands.
+  $cmdname is the command that a player types, and \&function is a reference
+  to the function that will be called when the player types this command.
+  $where is either 'pre' or 'post' and determines in which order this command
+  will be added to the existing dispatch table for command lookups.  Example:
+  there is already a command called 'north', and you want to add a new command
+  called 'nag'.  If you make $where 'post', if someone types the command 'n' it
+  will execute the function for 'north'.  If you use 'pre' for $where, then
+  a player typing the command 'n' will execute 'nag' instead.
+
+  The command dispatch will provide the current PMud::Data::Player object as
+  the first argument, and the remainder of the arguments the player typed after
+  the command will be provided as an array. In the below example, we're adding
+  the command 'nag' which will be prepended to the command dispatch table.
+
+  sub nag {
+    my $player = shift;
+    my @args = @_;
+
+    $player->send("You nag everyone.\n\r");
+  }
+
+  PMud::Data::Player::add_command("nag", \&nag, 'pre');
+
+=cut
+
+sub add_command {
+    my $command = shift;
+    my $function = shift;
+    my $where = shift;
+
+    die "Function not provided or not a code block" if (! $function or ref $function ne "CODE");
+
+    if ($where and $where eq "pre") {
+        push @CMDDISPATCH, $command, $function;
+    } else {
+        unshift @CMDDISPATCH, $command, $function;
+    }
+
+    return 1;
+}
+
 =head1 Methods
 
 =head2 new($parent, $data)
 
   Create a new PMud::Data::Player object. $parent is a reference to the the 
-  PMud::Data object creating this Player object. $data is a hashref to the database
+  PMud::Data object creating this Player object. $data is a hashref of the database
   table row for this player which we use to actually construct the object.
 
 =cut
@@ -26,29 +90,47 @@ sub new {
     my $parent = shift;
     my $data = shift;
 
+    return undef if (! $parent or ref $parent ne "PMud::Data");
+
     return undef if (! $data or ref $data ne "HASH");
 
     my $self = {};
 
     $self->{parent} = $parent;
 
-    # Store the entire data structure so we can easily dump it back to DB later
-    $self->{data} = $data;
+    if ($data) {
+        # Store the entire data structure so we can easily dump it back to DB later
+        $self->{data} = $data;
 
-    # Separate out the stats into individual variables
-    ($self->{class}, $self->{level}, $self->{sex}, $self->{position},
-    $self->{str}, $self->{dex}, $self->{con}, $self->{int}, $self->{wis},
-    $self->{luc}, $self->{currhp}, $self->{maxhp}, $self->{currmana},
-    $self->{maxmana}, $self->{currstam}, $self->{maxstam}) = split(/ /, $self->{data}->{stats});
+        # Separate out the stats into individual variables
+        ($self->{deity}, $self->{class}, $self->{level}, $self->{sex}, $self->{position},
+        $self->{str}, $self->{dex}, $self->{con}, $self->{int}, $self->{wis},
+        $self->{luc}, $self->{currhp}, $self->{maxhp}, $self->{currmana},
+        $self->{maxmana}, $self->{currstam}, $self->{maxstam}) = split(/ /, $self->{data}->{stats});
 
-    $self->{room} = $self->{parent}->getObject(type => "room", id => $self->{data}->{location});
-    if (! ref $self->{room}) {
-        $self->{room} = $self->{parent}->getObject(type => "room", id => 0);
+        $self->{room} = $self->{parent}->getObject(type => "room", id => $self->{data}->{location});
+        if (! ref $self->{room}) {
+            $self->{room} = $self->{parent}->getObject(type => "room", id => 0);
+        }
+    } else {
+        $self->{create} = 1;
     }
 
     bless $self, $class;
 
     return $self;
+}
+
+=head2 $self->create
+
+  Create a new character - returns 1 with no arguments if the character is in
+  the creation process.  With arguments, tries to continue to the next step
+  of the creation process.
+
+=cut 
+
+sub create {
+    my $self = shift;
 }
 
 =head2 $self->room
@@ -61,6 +143,54 @@ sub room {
     my $self = shift;
 
     return $self->{room};
+}
+
+=head2 $self->from_room
+
+  Remove the current player from the current room
+
+=cut
+
+sub from_room {
+    my $self = shift;
+
+    if (! $self->room) {
+        return 0;
+    }
+
+    $self->{room}->removeplayer($self);
+    $self->{room} = undef;
+    return 1;
+}
+
+=head2 $self->to_room
+
+  $self->to_room($roomid)
+
+  $self->to_room($roomobj)
+
+  Puts the player object inside the room specified by the room id number or 
+  a room object
+
+=cut
+
+sub to_room {
+    my $self = shift;
+    my $room = shift;
+
+    if ($self->room) {
+        $self->errstr("Player $self->{data}->{id} is already in a room");
+        0;
+    }
+
+    if (ref $room) {
+        $self->{room} = $room;
+    } else {
+        $self->{room} = $self->{parent}->getObject(type => "room", id => $room);
+    }
+
+    $self->{room}->addplayer($self);
+    return 1;
 }
 
 =head2 $self->save
@@ -147,10 +277,7 @@ sub send {
 sub is_admin {
     my $self = shift;
 
-    if ($self->{id} eq "admin") { return 1; }
-    if (exists $self->{data}->{admin} and $self->{data}->{admin}) {
-        return 1;
-    }
+    if ($self->{deity} >= 10) { return 1; }
 
     return 0;
 }
@@ -164,12 +291,44 @@ sub is_admin {
 sub do {
     my $self = shift;
     my $command = shift;
+    my @args = @_;
 
-    $self->send("Trying to do $command\n\r");
+    return 0 if (! $command);
+    my $i = 0;
+    while ($i <= $#CMDDISPATCH) {
+        if ($CMDDISPATCH[$i] =~ /^$command/i) {
+            $i++;
+            return $CMDDISPATCH[$i]->($self, @args);
+        }
+
+        $i += 2;
+    }
+
+    return 0;
+    #if (my $method = $self->can("cmd$command")) {
+        #return $self->$method(@args);
+    #} else {
+        #$self->send("You can't do that!\n\r");
+        #return 0;
+    #}
 }
 
 ################################################
 # All the commands that can be performed by 'do'
+
+sub bug {
+    my $self = shift;
+    my $message = join(' ', @_);
+
+    if (! $message) {
+        $self->send("A description of the bug must be supplied");
+        return 0;
+    }
+
+    PMud::Data::log_bug($message);
+
+    return 1;
+}
 
 sub look {
     my $self = shift;
@@ -177,6 +336,70 @@ sub look {
     $self->send($self->room->name."\n\r".$self->room->description."\n\r");
 
     return 1;
+}
+
+sub northwest {
+    my $self = shift;
+
+    return $self->move("nw");
+}
+
+sub north {
+    my $self = shift;
+
+    return $self->move("n");
+}
+
+sub northeast {
+    my $self = shift;
+
+    return $self->move("ne");
+}
+
+sub east {
+    my $self = shift;
+
+    return $self->move("e");
+}
+
+sub southeast {
+    my $self = shift;
+
+    return $self->move("se");
+}
+
+sub south {
+    my $self = shift;
+
+    return $self->move("s");
+}
+
+sub southwest {
+    my $self = shift;
+
+    return $self->move("sw");
+}
+
+sub west {
+    my $self = shift;
+
+    return $self->move("w");
+}
+
+sub move {
+    my $self = shift;
+    my $dir = lc(shift);
+
+    my $newroom = $self->room->exit($dir);
+
+    if ($newroom) {
+        $self->{room} = $newroom;
+        $self->look;
+        return 1;
+    }
+
+    $self->send("No exit exists in that direction.\n\r");
+    return 0;
 }
 
 1;

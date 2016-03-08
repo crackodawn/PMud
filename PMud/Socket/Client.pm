@@ -198,7 +198,7 @@ sub authenticate {
             # Set the client in the player object
             $self->{player}->client($self);
             $self->send("Welcome to the MUD, ".$self->player->id."!\n\r\n\r");
-            $self->{player}->look;
+            $self->{player}->do('look');
             return 1;
         } else {
             delete $self->{player};

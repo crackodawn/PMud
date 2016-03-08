@@ -69,7 +69,7 @@ sub new {
     $self->{port} = $opts{port};
 
     if ($opts{motd} and -r $opts{motd}) {
-        open my $motd, '<', $opts{motd};
+        open my $motd, '<', $opts{motd} or die "Can't open $opts{motd}: $!";
         while (<$motd>) {
             $self->{motd} .= $_;
         }
@@ -91,7 +91,7 @@ sub new {
 
   The run method actually starts the MUD process.  It reads the database
   (creating one if it doesn't exist), opens the listening socket, and then
-  starts the loop.
+  starts the control loop.
 
 =cut
 
@@ -131,12 +131,13 @@ sub run {
             if ($cinput) {
                 # Process player input if the client has authenticated
                 if ($clients[$cnum]->authentic) {
+                    my ($cmd, @args) = split(/\s+/, $cinput);
                     # If input starts with the admin character and the player
                     # is an admin, process admin input
-                    if (substr($cinput,0,1) eq $self->{adminchar} and $clients[$cnum]->player->is_admin) {
-                        $self->admin_do(substr($cinput,1));
+                    if (substr($cmd,0,1) eq $self->{adminchar} and $clients[$cnum]->player->is_admin) {
+                        $self->admin_do(lc(substr($cmd,1)), @args);
                     } else {
-                        $clients[$cnum]->player->do($cinput);
+                        $clients[$cnum]->player->do(lc($cmd), @args);
                     }
                 # Otherwise try to continue client authentication
                 } else {
@@ -164,6 +165,8 @@ sub run {
 sub admin_do {
     my $self = shift;
     my $command = shift;
+
+    return undef if (! $self->isa("PMud"));
 
     if ($command =~ /^die$/) {
         $self->{up} = 0;
