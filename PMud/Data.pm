@@ -73,7 +73,7 @@ sub _createDb {
     # defs will be things like type, size, weight, wearloc
     # typedefs are definitions specific to that item type like armor info, weapon info, or container info
     $self->_do("CREATE TABLE items (id INT PRIMARY KEY, name VARCHAR(255), short TEXT, description TEXT, defs VARCHAR(64), typedefs VARCHAR(64), flags INT, mods INT)") or return 0;
-    $self->_do("CREATE TABLE bug (id INT PRIMARY KEY, message TEXT");
+    $self->_do("CREATE TABLE bugs (id INT PRIMARY KEY, message TEXT)") or return 0;
 
     my $salt = join '', ('.', '/', 0..9, 'A'..'Z', 'a'..'z')[rand 64, rand 64];
     my $passwd = crypt('admin', $salt);
@@ -341,7 +341,7 @@ sub log_bug {
 
     return 0 if (! $message);
 
-    my $sth = $self->{parent}->{dbh}->prepare_cached("INSERT INTO bug (message) VALUES (?)");
+    my $sth = $self->{parent}->{dbh}->prepare_cached("INSERT INTO bugs (message) VALUES (?)");
     if ($sth->execute($message)) {
         $sth->finish();
         return 1;
