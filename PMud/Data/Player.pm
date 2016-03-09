@@ -390,12 +390,15 @@ sub move {
     my $self = shift;
     my $dir = lc(shift);
 
-    my $newroom = $self->room->exit($dir);
+    if ($self->room) {
+        my $newroom = $self->room->exit($dir);
 
-    if ($newroom) {
-        $self->{room} = $newroom;
-        $self->look;
-        return 1;
+        if ($newroom) {
+            $self->from_room;
+            $self->to_room($newroom);
+            $self->look;
+            return 1;
+        }
     }
 
     $self->send("No exit exists in that direction.\n\r");

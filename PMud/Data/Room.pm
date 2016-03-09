@@ -44,7 +44,7 @@ sub new {
         $self->{data}->{exits} = "";
         $self->{data}->{resets} = "";
     } else {
-        if ($self->{data}->{exits}) {
+        if (exists $self->{data}->{exits} and $self->{data}->{exits}) {
             foreach my $exit (split(/ /, $self->{data}->{exits})) {
                 my ($dir, $id) = $exit =~ /^(\w+)(\d+)$/;
     
