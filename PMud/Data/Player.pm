@@ -290,6 +290,18 @@ sub send {
     return 0;
 }
 
+=head2 $self->prompt
+
+  Send the player a typing prompt
+
+=cut
+
+sub prompt {
+    my $self = shift;
+
+    return $self->send("# ");
+}
+
 =head2 $self->is_admin
 
   Returns true if this player has admin privileges or false otherwise.

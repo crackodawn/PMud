@@ -127,7 +127,7 @@ sub get {
         close $self->{socket};
     }
 
-    my $buffer;
+    my $buffer = undef;
     # If we have a newline, then take everything up to the newline and return
     # it, and remove it from the buffer
     if ($self->{bufferin} and $self->{bufferin} =~ /\n/) {
@@ -202,6 +202,7 @@ sub authenticate {
             $self->{player}->to_room($self->{player}->location);
             $self->{player}->room->send($self->{player}->id." appears out of thin air.", $self->{player});
             $self->{player}->do('look');
+            $self->{player}->prompt;
             return 1;
         } else {
             delete $self->{player};

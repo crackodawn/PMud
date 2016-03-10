@@ -128,19 +128,22 @@ sub run {
 
             $cinput = $clients[$cnum]->get;
 
-            if ($cinput) {
+            if (defined $cinput) {
                 # Process player input if the client has authenticated
                 if ($clients[$cnum]->authentic) {
-                    my ($cmd, @args) = split(/\s+/, $cinput);
-                    # If input starts with the admin character and the player
-                    # is an admin, process admin input
-                    if (substr($cmd,0,1) eq $self->{adminchar} and $clients[$cnum]->player->is_admin) {
-                        $self->admin_do(lc(substr($cmd,1)), @args);
-                    } else {
-                        $clients[$cnum]->player->do(lc($cmd), @args);
+                    if ($cinput) {
+                        my ($cmd, @args) = split(/\s+/, $cinput);
+                        # If input starts with the admin character and the player
+                        # is an admin, process admin input
+                        if (substr($cmd,0,1) eq $self->{adminchar} and $clients[$cnum]->player->is_admin) {
+                            $self->admin_do(lc(substr($cmd,1)), @args);
+                        } else {
+                            $clients[$cnum]->player->do(lc($cmd), @args);
+                        }
                     }
+                    $clients[$cnum]->player->prompt;
                 # Otherwise try to continue client authentication
-                } else {
+                } elsif ($cinput) {
                     $clients[$cnum]->authenticate($self->{data}, $cinput);
                 }
             }
