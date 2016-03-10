@@ -107,11 +107,6 @@ sub new {
         $self->{str}, $self->{dex}, $self->{con}, $self->{int}, $self->{wis},
         $self->{luc}, $self->{currhp}, $self->{maxhp}, $self->{currmana},
         $self->{maxmana}, $self->{currstam}, $self->{maxstam}) = split(/ /, $self->{data}->{stats});
-
-        $self->{room} = $self->{parent}->getObject(type => "room", id => $self->{data}->{location});
-        if (! ref $self->{room}) {
-            $self->{room} = $self->{parent}->getObject(type => "room", id => 0);
-        }
     } else {
         $self->{create} = 1;
     }
@@ -131,6 +126,30 @@ sub new {
 
 sub create {
     my $self = shift;
+}
+
+=head2 $self->id
+
+  Returns the ID of this Player (Name)
+
+=cut
+
+sub id {
+    my $self = shift;
+
+    return $self->{data}->{id};
+}
+
+=head2 $self->location
+
+    Returns the saved location ID of this player (Room ID)
+
+=cut
+
+sub location {
+    my $self = shift;
+
+    return $self->{data}->{location};
 }
 
 =head2 $self->room
@@ -187,6 +206,9 @@ sub to_room {
         $self->{room} = $room;
     } else {
         $self->{room} = $self->{parent}->getObject(type => "room", id => $room);
+        if (! $self->{room}) {
+            $self->{room} = $self->{parent}->getObject(type => "room", id => 0);
+        }
     }
 
     $self->{room}->addplayer($self);
@@ -394,8 +416,10 @@ sub move {
         my $newroom = $self->room->exit($dir);
 
         if ($newroom) {
+            $self->room->send($self->id." has left the room.", $self);
             $self->from_room;
             $self->to_room($newroom);
+            $self->room->send($self->id." has entered the room.", $self);
             $self->look;
             return 1;
         }

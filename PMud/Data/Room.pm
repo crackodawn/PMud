@@ -119,7 +119,7 @@ sub exit {
 =head2 $self->send($text, @exceptions)
 
   Sends the specified text to all PMud::Data::Player objects in the room, except
-  any objects with a player id included in @exceptions.
+  any PMud::Data::Player objects in the @exceptions list.
 
 =cut
 
@@ -129,7 +129,7 @@ sub send {
     my @exceptions = @_;
 
     foreach my $id (keys %{$self->{players}}) {
-        $self->{players}->{$id}->send($text) unless (grep(/^$id$/, @exceptions));
+        $self->{players}->{$id}->send($text) unless (grep { $_ == $self->{players}->{$id} } @exceptions);
     }
 }
 

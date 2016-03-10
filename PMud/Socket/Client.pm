@@ -60,6 +60,7 @@ sub new {
     }
 
     $self->{socket} = $socket;
+    $self->{socket}->blocking(0);
     $self->{lastrecv} = time;
     $self->{authstep} = 0;
     $self->{authentic} = 0;
@@ -115,9 +116,9 @@ sub get {
     my $self = shift;
 
     my $data;
-    sysread($self->{socket}, $data, 4096);
+    my $bytes = sysread($self->{socket}, $data, 4096);
 
-    if ($data) {
+    if (defined $bytes and $bytes > 0) {
         $self->{bufferin} .= $data;
         # Remove carriage returns as we never keep these
         $self->{bufferin} =~ s/\r//g;
@@ -129,7 +130,7 @@ sub get {
     my $buffer;
     # If we have a newline, then take everything up to the newline and return
     # it, and remove it from the buffer
-    if ($self->{bufferin} =~ /\n/) {
+    if ($self->{bufferin} and $self->{bufferin} =~ /\n/) {
         chomp($buffer = substr($self->{bufferin}, 0, index($self->{bufferin}, "\n")+1));
         $self->{bufferin} = substr($self->{bufferin}, index($self->{bufferin}, "\n")+1);
     }
@@ -198,6 +199,8 @@ sub authenticate {
             # Set the client in the player object
             $self->{player}->client($self);
             $self->send("Welcome to the MUD, ".$self->player->id."!\n\r\n\r");
+            $self->{player}->to_room($self->{player}->location);
+            $self->{player}->room->send($self->{player}->id." appears out of thin air.", $self->{player});
             $self->{player}->do('look');
             return 1;
         } else {
