@@ -141,7 +141,7 @@ sub run {
                             $clients[$cnum]->player->do(lc($cmd), @args);
                         }
                     }
-                    $clients[$cnum]->player->prompt;
+                    $clients[$cnum]->player->send_prompt;
                 # Otherwise try to continue client authentication
                 } elsif ($cinput) {
                     $clients[$cnum]->authenticate($self->{data}, $cinput);

@@ -202,7 +202,7 @@ sub authenticate {
             $self->{player}->to_room($self->{player}->location);
             $self->{player}->room->send($self->{player}->id." appears out of thin air.", $self->{player});
             $self->{player}->do('look');
-            $self->{player}->prompt;
+            $self->{player}->send_prompt;
             return 1;
         } else {
             delete $self->{player};

@@ -290,13 +290,13 @@ sub send {
     return 0;
 }
 
-=head2 $self->prompt
+=head2 $self->send_prompt
 
   Send the player a typing prompt
 
 =cut
 
-sub prompt {
+sub send_prompt {
     my $self = shift;
 
     return $self->send("# ");
