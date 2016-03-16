@@ -3,11 +3,39 @@ package PMud::Data;
 use strict;
 use warnings;
 use DBI;
+use Term::ANSIColor;
 use PMud::Data::Player;
 use PMud::Data::Room;
 use PMud::Data::NPC;
+use Data::Dumper;
 
 @PMud::Data::ISA = ('PMud');
+
+# Color codes to interpret
+our %COLORS = (
+    r   => Term::ANSIColor::color('clear red'),
+    R   => Term::ANSIColor::color('bold red'),
+    b   => Term::ANSIColor::color('clear blue'),
+    B   => Term::ANSIColor::color('bold blue'),
+    y   => Term::ANSIColor::color('clear yellow'),
+    Y   => Term::ANSIColor::color('bold yellow'),
+    c   => Term::ANSIColor::color('clear cyan'),
+    C   => Term::ANSIColor::color('bold cyan'),
+    g   => Term::ANSIColor::color('clear green'),
+    G   => Term::ANSIColor::color('bold green'),
+    m   => Term::ANSIColor::color('clear magenta'),
+    M   => Term::ANSIColor::color('bold magenta'),
+    d   => Term::ANSIColor::color('clear black'),
+    D   => Term::ANSIColor::color('bold black'),
+    w   => Term::ANSIColor::color('clear white'),
+    W   => Term::ANSIColor::color('bold white'),
+    x   => Term::ANSIColor::color('reset')
+);
+
+# Pad the remainder just in case someone references one
+foreach ("A".."Z", "a".."z") {
+    $COLORS{$_} = "" if not defined $COLORS{$_};
+}
 
 =head1 Synopsis
 
@@ -313,15 +341,15 @@ sub writeToDb {
     my @columns = ();
     my @values = ();
     my @marks = ();
-    foreach my $key (keys %{$self->{data}}) {
+    foreach my $key (sort keys %{$self->{data}}) {
         push @columns, $key;
         push @values, $self->{data}->{$key};
         push @marks, "?";
     }
 
-    my $query = "INSERT OR REPLACE INTO $table (".join(', ', @marks).") VALUES (".join(', ', @marks).")";
+    my $query = "REPLACE INTO $table (".join(', ', @columns).") VALUES (".join(', ', @marks).")";
     my $sth = $self->{parent}->{dbh}->prepare_cached($query);
-    if ($sth->execute(@columns, @values)) {
+    if ($sth->execute(@values)) {
         $sth->finish();
         return 1;
     } else {
@@ -349,6 +377,78 @@ sub log_bug {
         return 0;
     }
 }
+
+=head2 $self->is_set
+
+  Check if a flag is set in this object
+
+=cut
+
+sub is_set {
+    my $self = shift;
+    my $flag = shift;
+
+    return 0 if (! $flag);
+
+    if ($self->{data}->{flags}) {
+        return ($self->{data}->{flags} & $flag);
+    }
+
+    return 0;
+}
+
+=head2 $self->set_flag
+
+  Set a flag in this object
+
+=cut
+
+sub set_flag {
+    my $self = shift;
+    my $flag = shift;
+
+    return 0 if (! $flag);
+
+    $self->{data}->{flags} |= $flag;
+
+    return 1;
+}
+
+=head2 $self->remove_flag
+
+  Remove a flag from this object
+
+=cut
+
+sub remove_flag {
+    my $self = shift;
+    my $flag = shift;
+
+    return 0 if (! $flag);
+
+    $self->{data}->{flags} &= ~$flag;
+
+    return 1;
+}
+
+=head2 $self->toggle_flag
+
+  Toggle a flag on this object
+
+=cut
+
+sub toggle_flag {
+    my $self = shift;
+    my $flag = shift;
+
+    return 0 if (! $flag);
+    
+    my $flags = $self->{data}->{flags};
+    $self->{data}->{flags} = $flags^$flag;
+
+    return 1;
+}
+
 
 =head2 $self->cleanup
 

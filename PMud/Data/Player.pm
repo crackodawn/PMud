@@ -6,6 +6,7 @@ use Data::Dumper;
 
 @PMud::Data::Player::ISA = ('PMud::Data');
 
+# Commands and the functions they call
 my @CMDDISPATCH = (
     'north',        \&north,
     'ne',           \&northeast,
@@ -20,7 +21,14 @@ my @CMDDISPATCH = (
     'southwest',    \&southwest,
     'west',         \&west,
     'move',         \&move,
-    'look',         \&look
+    'look',         \&look,
+    'color',        \&color,
+    'save',         \&save
+);
+
+# Player flags
+our %PFLAGS = (
+    'color'         => 1
 );
 
 =head1 Synopsis
@@ -224,7 +232,7 @@ sub to_room {
 sub save {
     my $self = shift;
 
-    $self->{data}->{stats} = "$self->{class} $self->{level} $self->{sex} $self->{position} $self->{str} $self->{dex} $self->{con} $self->{int} $self->{wis} $self->{luc} $self->{currhp} $self->{maxhp} $self->{currmana} $self->{maxmana} $self->{currstam} $self->{maxstam}";
+    $self->{data}->{stats} = "$self->{deity} $self->{class} $self->{level} $self->{sex} $self->{position} $self->{str} $self->{dex} $self->{con} $self->{int} $self->{wis} $self->{luc} $self->{currhp} $self->{maxhp} $self->{currmana} $self->{maxmana} $self->{currstam} $self->{maxstam}";
 
     $self->writeToDb;
 }
@@ -283,6 +291,11 @@ sub send {
     my $text = shift;
 
     if ($self->client and $text) {
+        if ($self->is_set($PFLAGS{color})) {
+            $text =~ s/\{(\w)/$PMud::Data::COLORS{$1}/g;
+        } else {
+            $text =~ s/\{(\w)//g;
+        }
         $self->client->send($text);
         return 1;
     }
@@ -299,7 +312,7 @@ sub send {
 sub send_prompt {
     my $self = shift;
 
-    return $self->send("# ");
+    return $self->send("{G# {x");
 }
 
 =head2 $self->is_admin
@@ -439,6 +452,12 @@ sub move {
 
     $self->send("No exit exists in that direction.\n\r");
     return 0;
+}
+
+sub color {
+    my $self = shift;
+
+    return $self->toggle_flag($PFLAGS{color});
 }
 
 1;

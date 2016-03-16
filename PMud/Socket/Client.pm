@@ -8,32 +8,6 @@ use Term::ANSIColor;
 
 our $TIMEOUT = 900;
 
-# Color codes to interpret and send
-my %COLORS = (
-    r   => Term::ANSIColor::color('clear red'),
-    R   => Term::ANSIColor::color('bold red'),
-    b   => Term::ANSIColor::color('clear blue'),
-    B   => Term::ANSIColor::color('bold blue'),
-    y   => Term::ANSIColor::color('clear yellow'),
-    Y   => Term::ANSIColor::color('bold yellow'),
-    c   => Term::ANSIColor::color('clear cyan'),
-    C   => Term::ANSIColor::color('bold cyan'),
-    g   => Term::ANSIColor::color('clear green'),
-    G   => Term::ANSIColor::color('bold green'),
-    m   => Term::ANSIColor::color('clear magenta'),
-    M   => Term::ANSIColor::color('bold magenta'),
-    d   => Term::ANSIColor::color('clear black'),
-    D   => Term::ANSIColor::color('bold black'),
-    w   => Term::ANSIColor::color('clear white'),
-    W   => Term::ANSIColor::color('bold white'),
-    x   => Term::ANSIColor::color('reset')
-);
-
-# Pad the remainder just in case someone references one
-foreach ("A".."Z", "a".."z") {
-    $COLORS{$_} = "" if not defined $COLORS{$_};
-}
-
 =head1 Synopsis
 
   PMud::Socket::Client - Connected client objects.
