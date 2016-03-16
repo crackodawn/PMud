@@ -312,7 +312,12 @@ sub send {
 sub send_prompt {
     my $self = shift;
 
-    return $self->send("{G# {x");
+    return $self->send(
+        $self->perccolor($self->{currhp},$self->{maxhp})."$self->{currhp} ".
+        $self->perccolor($self->{currmana},$self->{maxmana})."$self->{currmana} ".
+        $self->perccolor($self->{currstam},$self->{maxstam})."$self->{currstam} ".
+        "{x# "
+    );
 }
 
 =head2 $self->is_admin

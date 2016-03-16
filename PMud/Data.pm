@@ -108,7 +108,7 @@ sub _createDb {
 
     # Create a single admin user and a basic room, both required to actually
     # login to the MUD
-    $self->_do("INSERT INTO players VALUES ('admin', '$passwd', 0, 0, 0, '10 0 1 M 0 1 1 1 1 1 1 1 1 1 1 1 1', 0, 0)") or return 0;
+    $self->_do("INSERT INTO players VALUES ('admin', '$passwd', 0, 0, 0, '10 0 1 M 0 1 1 1 1 1 1 9999 9999 9999 9999 9999 9999', 0, 0)") or return 0;
     $self->_do("INSERT INTO rooms VALUES (0, 'The Void', 'The empty void of space', 0, 0, 'N1 E2 W3', NULL)") or return 0;
     $self->_do("INSERT INTO rooms VALUES (1, 'Room 1', 'A new room 1', 0, 0, 'S0', NULL)") or return 0;
     $self->_do("INSERT INTO rooms VALUES (2, 'Room 2', 'A new room 2', 0, 0, 'W0', NULL)") or return 0;
@@ -152,6 +152,20 @@ sub _getRow {
     $sth->finish();
 
     return $hashref;
+}
+
+# Return a color based on a percentage
+sub perccolor {
+    my ($currval, $maxval) = @_;
+
+    return undef if (! defined $currval or ! defined $maxval or ! $maxval);
+
+    my $perc = int(($currval / $maxval) * 100);
+    if ($perc > 99) { return "{W"; }
+    elsif ($perc > 70) { return "{G"; }
+    elsif ($perc > 40) { return "{Y"; }
+    elsif ($perc > 20) { return "{R"; }
+    else { return "{D"; }
 }
 
 =head2 $self->loadNPCs
@@ -448,7 +462,6 @@ sub toggle_flag {
 
     return 1;
 }
-
 
 =head2 $self->cleanup
 
